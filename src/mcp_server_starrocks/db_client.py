@@ -298,6 +298,21 @@ def remove_ansi_codes(text):
   return ANSI_ESCAPE_PATTERN.sub('', text)
 
 
+def _build_mysql_init_command_options() -> dict:
+    """Map STARROCKS_INIT_COMMAND to mysql.connector's init_command.
+
+    mysql.connector runs init_command right after the connection is
+    established and again after every pool session reset, so this is the
+    place for session state that must survive pooled connection reuse
+    (e.g. SET warehouse = 'x' on a shared-data cluster). MySQL protocol only;
+    the Arrow Flight SQL path ignores it.
+    """
+    init_command = os.getenv('STARROCKS_INIT_COMMAND', '').strip()
+    if not init_command:
+        return {}
+    return {'init_command': init_command}
+
+
 def _resolve_connection_password(user: str, explicit_password: str, explicit_password_provided: bool) -> str:
     """Resolve password from explicit config first, then optional Keychain lookup."""
     if not explicit_password_provided and 'STARROCKS_PASSWORD' in os.environ:
@@ -354,6 +369,7 @@ class DBClient:
         })
         # Apply optional TLS/SSL options for the MySQL protocol connection.
         self.connection_params.update(_build_mysql_ssl_options())
+        self.connection_params.update(_build_mysql_init_command_options())
         self.default_database = self.connection_params.get('database')
 
         # MySQL connection pool

@@ -276,6 +276,7 @@ export STARROCKS_PASSWORD_KEYCHAIN_ACCOUNT=root
 - `STARROCKS_CHART_DEFAULT_FORMAT`: (Optional) Default output format for `query_and_plotly_chart` when the `format` argument is omitted. One of `json`, `png`, `jpeg` (default), or `html`. Set to `html` to always write an interactive chart file to `STARROCKS_CHART_OUTPUT_DIR` (with an inline PNG preview) without passing `format` on every call. Invalid values fall back to `jpeg` with a warning.
 
 - `STARROCKS_MYSQL_AUTH_PLUGIN`: (Optional) Specifies the authentication plugin to use when connecting to the StarRocks FE service. For example, set to `mysql_clear_password` if your StarRocks deployment requires clear text password authentication (such as when using certain LDAP or external authentication setups). Only set this if your environment specifically requires it; otherwise, the default auth_plugin is used.
+- `STARROCKS_INIT_COMMAND`: (Optional) SQL statement run right after each MySQL-protocol connection is established, and again whenever a pooled connection is reset on return to the pool. Use it for session state that must survive connection reuse — for example `SET warehouse = 'my_warehouse'` to pin all queries to a warehouse on a shared-data cluster (a user-level `session.warehouse` property only applies at login and is lost on pool reset). Not applied when connecting via Arrow Flight SQL.
 
 ### TLS / SSL Configuration
 
