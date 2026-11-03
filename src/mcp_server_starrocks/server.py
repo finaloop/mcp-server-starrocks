@@ -88,17 +88,32 @@ _SUPPORTED_OUTPUT_FORMATS = ('csv', 'tsv', 'json', 'jsonl')
 def _resolve_output_path(output_file: str) -> str:
     """Resolve output_file to an absolute path.
 
-    Absolute paths (after ~ expansion) are used as-is. Relative paths are
-    resolved against output_dir. The parent directory is created if missing.
+    Relative paths resolve against output_dir. Restricted deployments also
+    confine absolute paths and symlinks to that directory.
     """
     path = os.path.expanduser(output_file)
     if not os.path.isabs(path):
         path = os.path.join(output_dir, path)
     path = os.path.abspath(path)
+    if os.getenv('STARROCKS_MCP_RESTRICT_OUTPUT') == '1':
+        root = os.path.realpath(output_dir)
+        path = os.path.realpath(path)
+        if path == root or os.path.commonpath([root, path]) != root:
+            raise ValueError('output_file must stay inside STARROCKS_MCP_OUTPUT_DIR')
     parent = os.path.dirname(path)
     if parent:
         os.makedirs(parent, exist_ok=True)
+        if os.getenv('STARROCKS_MCP_RESTRICT_OUTPUT') == '1':
+            # Only exports are public; the server keeps its private umask.
+            while parent != root:
+                os.chmod(parent, 0o755)
+                parent = os.path.dirname(parent)
     return path
+
+
+def _publish_output(path: str) -> None:
+    if os.getenv('STARROCKS_MCP_RESTRICT_OUTPUT') == '1':
+        os.chmod(path, 0o644)
 
 
 def _infer_output_format(path: str, fmt: str | None) -> str:
@@ -136,6 +151,7 @@ def _write_result_to_file(result: ResultSet, path: str, fmt: str) -> None:
     else:
         raise ValueError(
             f"Unsupported format '{fmt}'. Use one of: {', '.join(_SUPPORTED_OUTPUT_FORMATS)}.")
+    _publish_output(path)
 
 # Get database client instance
 db_client = get_db_client()
@@ -331,7 +347,7 @@ def _get_table_details(db_name, table_name, limit=None):
 def read_query(query: Annotated[str, Field(description="SQL query to execute")],
                db: Annotated[str|None, Field(description="database")] = None,
                output_file: Annotated[str|None, Field(
-                   description="If set, write the full result to this file and return only a summary + small preview inline. Relative paths resolve against STARROCKS_MCP_OUTPUT_DIR (default: ~/.mcp-server-starrocks/output/). Absolute paths (and ~) are used as-is. Format is inferred from the file extension (.csv, .tsv, .json, .jsonl, .ndjson) unless output_format is given. NOTE: the file is written on the server's filesystem, which may not be the client machine in remote/http deployments."
+                   description="If set, write the full result to this file and return only a summary + small preview inline. Relative paths resolve against STARROCKS_MCP_OUTPUT_DIR (default: ~/.mcp-server-starrocks/output/). Absolute paths (and ~) are accepted unless STARROCKS_MCP_RESTRICT_OUTPUT=1 confines all output to that directory. Format is inferred from the file extension (.csv, .tsv, .json, .jsonl, .ndjson) unless output_format is given. NOTE: the file is written on the server's filesystem, which may not be the client machine in remote/http deployments."
                )] = None,
                output_format: Annotated[str|None, Field(
                    description="Override file format: csv|tsv|json|jsonl. If omitted, inferred from output_file extension; defaults to csv."
@@ -639,7 +655,10 @@ def query_and_plotly_chart(
             os.makedirs(CHART_OUTPUT_DIR, exist_ok=True)
             fname = f"starrocks_chart_{int(time.time() * 1000)}.html"
             fpath = os.path.join(CHART_OUTPUT_DIR, fname)
+            if os.getenv('STARROCKS_MCP_RESTRICT_OUTPUT') == '1':
+                fpath = _resolve_output_path(fpath)
             fig.write_html(fpath, include_plotlyjs=CHART_INCLUDE_PLOTLYJS, full_html=True)
+            _publish_output(fpath)
 
             content = [
                 TextContent(
