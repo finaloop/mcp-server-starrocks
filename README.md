@@ -389,15 +389,40 @@ For the high-performance **Arrow Flight SQL** connection (enabled via `STARROCKS
 
 - `query_and_plotly_chart`
 
-  - **Description:** Executes a SQL query, loads the results into a Pandas DataFrame, and generates a Plotly chart using a provided Python expression. Designed for visualization in supporting UIs.
+  - **Description:** Executes a SQL query, loads the results into a Pandas DataFrame, and generates a Plotly chart from a validated chart description. Caller text is never executed as Python. Designed for visualization in supporting UIs.
   - **Input:**
     ```json
     {
       "query": "SQL query to fetch data",
-      "plotly_expr": "Python expression string using 'px' (Plotly Express) and 'df' (DataFrame). Example: 'px.scatter(df, x=\"col1\", y=\"col2\")'",
+      "plotly_expr": "px.scatter(df, x='col1', y='col2', title='Amounts', labels={'col1': 'Quantity'})",
       "db": "database name (optional, uses default database if not specified)"
     }
     ```
+  - **Chart language:** Exactly one call to `px.scatter`, `px.line`, `px.bar`,
+    `px.histogram`, `px.box`, `px.pie`, or `px.area`, with `df` as its only
+    positional argument. Options must be literal values; signed numbers, lists,
+    tuples and the `labels` dictionary are supported. Other attribute access,
+    subscripts, nested calls, variable references, argument unpacking and
+    unlisted functions or options are rejected before executing the query.
+    Column references are checked against query results before calling a chart
+    function. Rejected descriptions return `Invalid chart expression.`
+  - **Supported options** (only where the selected chart accepts them):
+    - Result columns: `x`, `y`, `color`, `size`, `symbol`, `line_dash`,
+      `line_group`, `names`, `values`, `facet_row`, `facet_col`, `hover_name`,
+      `text`, `error_x`, `error_x_minus`, `error_y`, `error_y_minus`,
+      `animation_frame`, `animation_group`, `pattern_shape`. All must name
+      existing columns; `x` and `y` also accept lists of column names.
+    - Column lists: `hover_data`, `custom_data`. `labels` maps existing column
+      names to literal display strings.
+    - Strings: `title`, `template`, `orientation`, `barmode`, `barnorm`,
+      `histnorm`, `histfunc`, `points`, `boxmode`, `marginal_x`, `marginal_y`,
+      `trendline`, `line_shape`, `render_mode`.
+    - Booleans: `log_x`, `log_y`, `markers`, `notched`, `cumulative`.
+    - Positive integers: `width`, `height`, `nbins`, `facet_col_wrap`.
+    - Numbers: `opacity`, `size_max`, `hole`, `facet_row_spacing`,
+      `facet_col_spacing`. `range_x` and `range_y` accept two numbers or strings.
+    - String lists: `color_discrete_sequence`, `symbol_sequence`,
+      `line_dash_sequence`, `pattern_shape_sequence`.
   - **Output:** A list containing:
     1.  `TextContent`: A text representation of the DataFrame and a note that the chart is for UI display.
     2.  `ImageContent`: The generated Plotly chart encoded as a base64 PNG image (`image/png`). Returns text error message on failure or if the query yields no data.

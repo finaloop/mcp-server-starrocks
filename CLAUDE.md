@@ -91,8 +91,8 @@ Environment variables for database connection:
 
 ### Security
 - SQL injection prevention through parameterized queries and backtick escaping
-- Plotly expressions are validated using AST parsing to prevent code injection
-- Limited `eval()` usage with restricted scope for chart generation
+- Chart descriptions are parsed as a closed set of Plotly Express functions and literal options
+- Caller text is never executed; chart functions are called directly after column validation
 
 ### Async Patterns
 - Tools are defined as async functions even though database operations are synchronous
