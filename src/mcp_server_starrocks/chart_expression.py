@@ -14,6 +14,11 @@ _CHARTS = {
     "box": px.box,
     "pie": px.pie,
     "area": px.area,
+    "density_heatmap": px.density_heatmap,
+    "treemap": px.treemap,
+    "funnel": px.funnel,
+    "timeline": px.timeline,
+    "imshow": px.imshow,
 }
 _COLUMN_OPTIONS = {
     "x",
@@ -36,8 +41,12 @@ _COLUMN_OPTIONS = {
     "animation_frame",
     "animation_group",
     "pattern_shape",
+    "x_start",
+    "x_end",
+    "ids",
+    "parents",
 }
-_COLUMN_LIST_OPTIONS = {"hover_data", "custom_data"}
+_COLUMN_LIST_OPTIONS = {"hover_data", "custom_data", "path"}
 _STRING_OPTIONS = {
     "title",
     "template",
@@ -53,6 +62,9 @@ _STRING_OPTIONS = {
     "trendline",
     "line_shape",
     "render_mode",
+    "origin",
+    "aspect",
+    "branchvalues",
 }
 _BOOL_OPTIONS = {"log_x", "log_y", "markers", "notched", "cumulative"}
 _INTEGER_OPTIONS = {"width", "height", "nbins", "facet_col_wrap"}
@@ -62,6 +74,9 @@ _NUMBER_OPTIONS = {
     "hole",
     "facet_row_spacing",
     "facet_col_spacing",
+    "zmin",
+    "zmax",
+    "color_continuous_midpoint",
 }
 _STRING_LIST_OPTIONS = {
     "color_discrete_sequence",
@@ -72,8 +87,10 @@ _STRING_LIST_OPTIONS = {
 
 
 class InvalidChartExpression(ValueError):
-    def __init__(self):
-        super().__init__("Invalid chart expression.")
+    def __init__(self, option=None):
+        super().__init__(
+            f"Invalid chart option: {option}." if option else "Invalid chart expression."
+        )
 
 
 def _literal(node):
@@ -109,6 +126,37 @@ def _literal(node):
 
 
 def _valid_option(name, value):
+    if name == "text_auto":
+        return type(value) in (bool, str)
+    if name == "color_continuous_scale":
+        return type(value) is str or (
+            type(value) is list
+            and bool(value)
+            and (
+                all(type(item) is str for item in value)
+                or all(
+                    type(item) is list
+                    and len(item) == 2
+                    and type(item[0]) in (int, float)
+                    and 0 <= item[0] <= 1
+                    and type(item[1]) is str
+                    for item in value
+                )
+            )
+        )
+    if name == "category_orders":
+        return type(value) is dict and all(
+            type(items) is list
+            and all(type(item) in (str, int, float, bool) for item in items)
+            for items in value.values()
+        )
+    if name == "color_discrete_map":
+        return value == "identity" or (
+            type(value) is dict
+            and all(type(color) is str for color in value.values())
+        )
+    if name == "hover_data" and type(value) is dict:
+        return all(type(item) in (bool, str) for item in value.values())
     if name in _COLUMN_OPTIONS:
         if name in {"x", "y"} and type(value) is list:
             return bool(value) and all(type(item) is str for item in value)
@@ -167,10 +215,10 @@ def parse_chart_expression(expression):
             or name in options
             or name not in signature(function).parameters
         ):
-            raise InvalidChartExpression()
+            raise InvalidChartExpression(name)
         value = _literal(keyword.value)
         if not _valid_option(name, value):
-            raise InvalidChartExpression()
+            raise InvalidChartExpression(name)
         options[name] = value
     return function, options
 
@@ -178,7 +226,7 @@ def parse_chart_expression(expression):
 def validate_chart_columns(options, columns):
     """All data references must name columns in this query's result."""
     for name, value in options.items():
-        if name in _COLUMN_OPTIONS | _COLUMN_LIST_OPTIONS | {"labels"}:
+        if name in _COLUMN_OPTIONS | _COLUMN_LIST_OPTIONS:
             references = [value] if type(value) is str else value
             if any(column not in columns for column in references):
                 raise InvalidChartExpression()

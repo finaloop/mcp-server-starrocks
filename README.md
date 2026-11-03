@@ -399,28 +399,35 @@ For the high-performance **Arrow Flight SQL** connection (enabled via `STARROCKS
     }
     ```
   - **Chart language:** Exactly one call to `px.scatter`, `px.line`, `px.bar`,
-    `px.histogram`, `px.box`, `px.pie`, or `px.area`, with `df` as its only
+    `px.histogram`, `px.box`, `px.pie`, `px.area`, `px.density_heatmap`,
+    `px.treemap`, `px.funnel`, `px.timeline`, or `px.imshow`, with `df` as its only
     positional argument. Options must be literal values; signed numbers, lists,
     tuples and the `labels` dictionary are supported. Other attribute access,
     subscripts, nested calls, variable references, argument unpacking and
     unlisted functions or options are rejected before executing the query.
+    Display label keys may name generated dimensions such as `variable` and `value`.
     Column references are checked against query results before calling a chart
-    function. Rejected descriptions return `Invalid chart expression.`
+    function. Rejected descriptions return `Invalid chart expression.`; invalid option types identify the option.
   - **Supported options** (only where the selected chart accepts them):
     - Result columns: `x`, `y`, `color`, `size`, `symbol`, `line_dash`,
       `line_group`, `names`, `values`, `facet_row`, `facet_col`, `hover_name`,
       `text`, `error_x`, `error_x_minus`, `error_y`, `error_y_minus`,
-      `animation_frame`, `animation_group`, `pattern_shape`. All must name
+      `animation_frame`, `animation_group`, `pattern_shape`, `x_start`, `x_end`,
+      `ids`, `parents`. All must name
       existing columns; `x` and `y` also accept lists of column names.
-    - Column lists: `hover_data`, `custom_data`. `labels` maps existing column
-      names to literal display strings.
+    - Column lists: `hover_data`, `custom_data`, `path`. `labels` maps display keys (including generated dimensions) to literal strings.
+      `hover_data` also accepts a dictionary of column names to booleans or format strings.
+      `category_orders` maps category columns to lists of literal values;
+      `color_discrete_map` maps category values to literal colors (or `identity`).
+      `text_auto` accepts a boolean or format string; `color_continuous_scale`
+      accepts a scale name, color list or list of numeric-stop/color pairs.
     - Strings: `title`, `template`, `orientation`, `barmode`, `barnorm`,
       `histnorm`, `histfunc`, `points`, `boxmode`, `marginal_x`, `marginal_y`,
-      `trendline`, `line_shape`, `render_mode`.
+      `trendline`, `line_shape`, `render_mode`, `origin`, `aspect`, `branchvalues`.
     - Booleans: `log_x`, `log_y`, `markers`, `notched`, `cumulative`.
     - Positive integers: `width`, `height`, `nbins`, `facet_col_wrap`.
     - Numbers: `opacity`, `size_max`, `hole`, `facet_row_spacing`,
-      `facet_col_spacing`. `range_x` and `range_y` accept two numbers or strings.
+      `facet_col_spacing`, `zmin`, `zmax`, `color_continuous_midpoint`. `range_x` and `range_y` accept two numbers or strings.
     - String lists: `color_discrete_sequence`, `symbol_sequence`,
       `line_dash_sequence`, `pattern_shape_sequence`.
   - **Output:** A list containing:

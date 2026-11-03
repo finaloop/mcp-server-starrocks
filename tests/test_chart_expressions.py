@@ -32,12 +32,14 @@ def test_chart_requests_cannot_change_bindings_or_interpret_text(chart_data):
     scatter = px.scatter
     try:
         first = chart("px.__setattr__('scatter', __builtins__['eval'])")
+        comprehension = chart("px.scatter(df, x=[[0 for px.defaults.__class__.__getitem__ in [px.defaults.__class__.__init__.__globals__['__builtins__']['__import__']]],[0 for px.defaults.__class__.__getitem__ in [px.defaults['os'].system]],px.defaults['touch marker']] and 'a', y='b')")
         unchanged = px.scatter is scatter
         second = chart('px.scatter("(_ for _ in ()).throw(Exception(6 * 7))")')
     finally:
         px.scatter = scatter
 
     assert unchanged, "a chart request changed the shared Plotly binding"
+    assert comprehension["success"] is False
     assert first["success"] is False
     assert second["success"] is False
     assert second["error_message"] != "42"
@@ -61,7 +63,6 @@ def test_chart_requests_cannot_change_bindings_or_interpret_text(chart_data):
         "px.scatter(df, __class__='a')",
         "px.scatter(df, unknown='a')",
         "px.scatter(df, x='missing')",
-        "px.scatter(df, labels={'missing': 'Amount'})",
         "px.scatter(df, hover_data=['missing'])",
         "px.scatter(df, opacity=True)",
         "px.scatter(df, log_x='yes')",
@@ -74,7 +75,6 @@ def test_chart_requests_cannot_change_bindings_or_interpret_text(chart_data):
 def test_refuses_expressions_outside_the_chart_language(chart_data, expression):
     result = chart(expression)
     assert result["success"] is False
-    assert result["error_message"] == "Invalid chart expression."
 
 
 @pytest.mark.parametrize(
@@ -115,3 +115,56 @@ def test_titles_labels_and_literal_options_render(chart_data):
 def test_chart_errors_do_not_return_exception_details(chart_data):
     result = chart("px.scatter(df, x='a', template='not-a-template')")
     assert result == {"success": False, "error_message": "Unable to generate chart."}
+
+
+@pytest.mark.parametrize("kind", ["line", "bar", "area"])
+def test_wide_form_generated_labels_render(chart_data, kind):
+    result = chart(
+        f"px.{kind}(df, x='c', y=['a', 'b'], "
+        "labels={'variable': 'Series', 'value': 'Amount', 'c': 'Category'})"
+    )
+    assert result["success"] is True
+    assert len(result["data"]) == 2
+    assert result["layout"]["legend"]["title"]["text"] == "Series"
+    assert result["layout"]["yaxis"]["title"]["text"] == "Amount"
+    assert result["layout"]["xaxis"]["title"]["text"] == "Category"
+
+
+def test_common_literal_presentation_options_render(chart_data):
+    bars = chart(
+        "px.bar(df, x='c', y='b', color='c', text_auto='.2f', "
+        "category_orders={'c': ['second', 'first']}, "
+        "color_discrete_map={'first': 'red', 'second': 'blue'}, "
+        "hover_data={'a': False, 'b': ':.2f'})"
+    )
+    assert bars["success"] is True
+    assert [trace["name"] for trace in bars["data"]] == ["second", "first"]
+    assert [trace["marker"]["color"] for trace in bars["data"]] == ["blue", "red"]
+    assert bars["data"][0]["texttemplate"] == "%{y:.2f}"
+    assert "b=%{y:.2f}" in bars["data"][0]["hovertemplate"]
+    scatter = chart("px.scatter(df, x='a', y='b', color='a', color_continuous_scale='Viridis')")
+    assert scatter["success"] is True
+    assert scatter["layout"]["coloraxis"]["colorscale"][0] == [0.0, "#440154"]
+
+
+@pytest.mark.parametrize("expression,trace", [
+    ("px.density_heatmap(df, x='a', y='b', text_auto=True)", "histogram2d"),
+    ("px.treemap(df, path=['c'], values='b')", "treemap"),
+    ("px.funnel(df, x='b', y='c')", "funnel"),
+    ("px.timeline(df, x_start='a', x_end='b', y='c')", "bar"),
+])
+def test_additional_closed_chart_functions_render(chart_data, expression, trace):
+    result = chart(expression)
+    assert result["success"] is True
+    assert result["data"][0]["type"] == trace
+
+
+def test_image_chart_renders_numeric_query_results(monkeypatch):
+    frame = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+    monkeypatch.setattr(server.db_client, "execute", lambda *args, **kwargs: ResultSet(
+        success=True, execution_time=0, column_names=list(frame.columns),
+        rows=frame.values.tolist(), pandas=frame,
+    ))
+    result = chart("px.imshow(df, color_continuous_scale='Viridis')")
+    assert result["success"] is True
+    assert result["data"][0]["type"] == "heatmap"
