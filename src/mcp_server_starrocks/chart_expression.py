@@ -85,6 +85,28 @@ _STRING_LIST_OPTIONS = {
     "pattern_shape_sequence",
 }
 
+_OPTION_KINDS = {
+    **dict.fromkeys(_COLUMN_OPTIONS, "column"),
+    **dict.fromkeys({"x", "y"}, "column_or_columns"),
+    **dict.fromkeys(_COLUMN_LIST_OPTIONS, "columns"),
+    **dict.fromkeys(_STRING_OPTIONS, "string"),
+    **dict.fromkeys(_BOOL_OPTIONS, "boolean"),
+    **dict.fromkeys(_INTEGER_OPTIONS, "integer"),
+    **dict.fromkeys(_NUMBER_OPTIONS, "number"),
+    **dict.fromkeys(_STRING_LIST_OPTIONS, "strings"),
+    **dict.fromkeys({"range_x", "range_y"}, "range"),
+    **{name: name for name in (
+        "text_auto", "color_continuous_scale", "category_orders",
+        "color_discrete_map", "hover_data", "labels",
+    )},
+}
+_CHART_SCHEMAS = {
+    function: {name: kind for name, kind in _OPTION_KINDS.items()
+               if name in signature(function).parameters}
+    for function in _CHARTS.values()
+}
+_CHART_SCHEMAS[px.imshow].update(x="coordinates", y="coordinates")
+
 
 class InvalidChartExpression(ValueError):
     def __init__(self, option=None):
@@ -125,10 +147,14 @@ def _literal(node):
     raise InvalidChartExpression()
 
 
-def _valid_option(name, value):
-    if name == "text_auto":
+def _valid_option(kind, value):
+    if kind == "coordinates":
+        return type(value) is list and bool(value) and all(
+            type(item) in (str, int, float) for item in value
+        )
+    if kind == "text_auto":
         return type(value) in (bool, str)
-    if name == "color_continuous_scale":
+    if kind == "color_continuous_scale":
         return type(value) is str or (
             type(value) is list
             and bool(value)
@@ -144,40 +170,40 @@ def _valid_option(name, value):
                 )
             )
         )
-    if name == "category_orders":
+    if kind == "category_orders":
         return type(value) is dict and all(
             type(items) is list
             and all(type(item) in (str, int, float, bool) for item in items)
             for items in value.values()
         )
-    if name == "color_discrete_map":
+    if kind == "color_discrete_map":
         return value == "identity" or (
             type(value) is dict
             and all(type(color) is str for color in value.values())
         )
-    if name == "hover_data" and type(value) is dict:
+    if kind == "hover_data" and type(value) is dict:
         return all(type(item) in (bool, str) for item in value.values())
-    if name in _COLUMN_OPTIONS:
-        if name in {"x", "y"} and type(value) is list:
+    if kind in {"column", "column_or_columns"}:
+        if kind == "column_or_columns" and type(value) is list:
             return bool(value) and all(type(item) is str for item in value)
         return type(value) is str
-    if name in _COLUMN_LIST_OPTIONS | _STRING_LIST_OPTIONS:
+    if kind in {"columns", "strings", "hover_data"}:
         return type(value) is list and all(type(item) is str for item in value)
-    if name in _STRING_OPTIONS:
+    if kind == "string":
         return type(value) is str
-    if name in _BOOL_OPTIONS:
+    if kind == "boolean":
         return type(value) is bool
-    if name in _INTEGER_OPTIONS:
+    if kind == "integer":
         return type(value) is int and value > 0
-    if name in _NUMBER_OPTIONS:
+    if kind == "number":
         return type(value) in (int, float)
-    if name in {"range_x", "range_y"}:
+    if kind == "range":
         return (
             type(value) is list
             and len(value) == 2
             and all(type(item) in (str, int, float) for item in value)
         )
-    if name == "labels":
+    if kind == "labels":
         return type(value) is dict and all(
             type(label) is str for label in value.values()
         )
@@ -207,26 +233,33 @@ def parse_chart_expression(expression):
     ):
         raise InvalidChartExpression()
     function = _CHARTS[call.func.attr]
+    schema = _CHART_SCHEMAS[function]
     options = {}
     for keyword in call.keywords:
         name = keyword.arg
         if (
             name is None
             or name in options
-            or name not in signature(function).parameters
+            or name not in schema
         ):
             raise InvalidChartExpression(name)
         value = _literal(keyword.value)
-        if not _valid_option(name, value):
+        if not _valid_option(schema[name], value):
             raise InvalidChartExpression(name)
         options[name] = value
     return function, options
 
 
-def validate_chart_columns(options, columns):
-    """All data references must name columns in this query's result."""
+def validate_chart_columns(function, options, frame):
+    """Validate data references and image coordinates for the selected function."""
+    schema = _CHART_SCHEMAS[function]
     for name, value in options.items():
-        if name in _COLUMN_OPTIONS | _COLUMN_LIST_OPTIONS:
+        kind = schema[name]
+        if kind == "coordinates":
+            dimension = 1 if name == "x" else 0
+            if len(value) != frame.shape[dimension]:
+                raise InvalidChartExpression(name)
+        elif kind in {"column", "column_or_columns", "columns", "hover_data"}:
             references = [value] if type(value) is str else value
-            if any(column not in columns for column in references):
+            if any(column not in frame.columns for column in references):
                 raise InvalidChartExpression()

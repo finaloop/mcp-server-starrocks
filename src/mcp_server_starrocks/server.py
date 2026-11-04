@@ -533,7 +533,7 @@ def one_line_summary(text: str, limit:int=100) -> str:
 def query_and_plotly_chart(
         query: Annotated[str, Field(description="SQL query to execute")],
         plotly_expr: Annotated[
-            str, Field(description="Chart description: px.scatter/line/bar/histogram/box/pie/area/density_heatmap/treemap/funnel/timeline/imshow(df, keyword=value). Data arguments name result columns; other options must be literals. Labels may rename columns or generated dimensions such as variable/value. Supports text_auto, color_continuous_scale, category_orders, color_discrete_map and hover_data lists or dictionaries. No Python code is executed. Example: px.scatter(df, x='a', y='b', color='c', title='Amounts', labels={'a': 'Quantity'})")],
+            str, Field(description="Chart description: px.scatter/line/bar/histogram/box/pie/area/density_heatmap/treemap/funnel/timeline/imshow(df, keyword=value). Tabular data arguments name result columns; imshow x/y accept literal string or numeric coordinate lists matching the matrix dimensions. Other options must be literals. Labels may rename columns or generated dimensions such as variable/value. Supports text_auto, color_continuous_scale, category_orders, color_discrete_map and hover_data lists or dictionaries. No Python code is executed. Example: px.scatter(df, x='a', y='b', color='c', title='Amounts', labels={'a': 'Quantity'})")],
         format: Annotated[str, Field(description="chart output format: json | png | jpeg | html. 'html' writes an interactive Plotly file to disk and returns its path plus a PNG preview. Defaults to the STARROCKS_CHART_DEFAULT_FORMAT env var, or 'jpeg' if unset.")] = CHART_DEFAULT_FORMAT,
         db: Annotated[str|None, Field(description="database")] = None,
         ctx: Context = None,
@@ -574,7 +574,7 @@ def query_and_plotly_chart(
                 content=[TextContent(type='text', text=f'Error: {errmsg}')],
                 structured_content={'success': False, 'error_message': errmsg},
             )
-        validate_chart_columns(chart_options, df.columns)
+        validate_chart_columns(chart_function, chart_options, df)
         fig = chart_function(df, **chart_options)
         if format == 'json':
             # return json representation of the figure for front-end rendering

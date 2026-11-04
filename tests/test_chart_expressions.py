@@ -67,6 +67,23 @@ def test_chart_requests_cannot_change_bindings_or_interpret_text(chart_data):
         "px.scatter(df, opacity=True)",
         "px.scatter(df, log_x='yes')",
         "px.scatter(df, width='wide')",
+        "px.scatter(df, x=['North', 'South'])",
+        "px.scatter(df, x=[10, 20])",
+        "px.scatter(df, hover_data={'a': print})",
+        "px.scatter(df, hover_data={'a': [1, 2]})",
+        "px.scatter(df, hover_data={'missing': True})",
+        "px.scatter(df, text_auto=df.x)",
+        "px.scatter(df, color_continuous_scale=px.colors)",
+        "px.scatter(df, color_continuous_scale=[x for x in df])",
+        "px.scatter(df, color_discrete_map={'first': (value := 'red')})",
+        "px.scatter(df, trendline_options={'log_x': True})",
+        "px.imshow(df, img=df)",
+        "px.imshow(df, x=df.columns)",
+        "px.imshow(df, x=['North'])",
+        "px.imshow(df, y=['Q1'])",
+        "px.data.iris()",
+        "px.get_trendline_results(df)",
+        "px.treemap(df, path=['missing'], values='b')",
         "px.scatter(df, x='a', x='b')",
         "px.scatter(df); px.bar(df)",
         "px.scatter(",
@@ -159,12 +176,22 @@ def test_additional_closed_chart_functions_render(chart_data, expression, trace)
     assert result["data"][0]["type"] == trace
 
 
-def test_image_chart_renders_numeric_query_results(monkeypatch):
+@pytest.mark.parametrize("axes", [
+    {},
+    {"x": ["North", "South"]},
+    {"y": ["Q1", "Q2"]},
+    {"x": [10, 20], "y": [-2.5, 0.5]},
+    {"x": ["North", "South"], "y": ["Q1", "Q2"]},
+])
+def test_image_chart_renders_numeric_query_results(monkeypatch, axes):
     frame = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
     monkeypatch.setattr(server.db_client, "execute", lambda *args, **kwargs: ResultSet(
         success=True, execution_time=0, column_names=list(frame.columns),
         rows=frame.values.tolist(), pandas=frame,
     ))
-    result = chart("px.imshow(df, color_continuous_scale='Viridis')")
+    options = ", ".join(f"{name}={value!r}" for name, value in axes.items())
+    result = chart(f"px.imshow(df, color_continuous_scale='Viridis', {options})")
     assert result["success"] is True
     assert result["data"][0]["type"] == "heatmap"
+    for name, value in axes.items():
+        assert result["data"][0][name] == value
